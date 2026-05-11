@@ -72,23 +72,44 @@ function aggregateRange(daily, start, end) {
   const rows = daily.filter(r => r.date >= start && r.date <= end);
   const fb = { cost:0, clicks:0, imp:0, conv:0 };
   const gg = { cost:0, clicks:0, imp:0, conv:0 };
-  rows.forEach(r => {
-    const dst = r.canal === "FACEBOOK" ? fb : gg;
-    dst.cost   += r.cost;
-    dst.clicks += r.clicks;
-    dst.imp    += r.imp;
-    dst.conv   += r.conv;
-  });
-  return {
-    fb, gg,
-    tot: {
-      cost:   fb.cost   + gg.cost,
-      clicks: fb.clicks + gg.clicks,
-      imp:    fb.imp    + gg.imp,
-      conv:   fb.conv   + gg.conv
-    }
-  };
-}
+
+  if (rows.length > 0) {
+    rows.forEach(r => {
+      const dst = r.canal === "FACEBOOK" ? fb : gg;
+      dst.cost   += r.cost;
+      dst.clicks += r.clicks;
+      dst.imp    += r.imp;
+      dst.conv   += r.conv;
+    });
+  } else {
+    const { INITIAL } = require("./db");
+    const startD = new Date(start), endD = new Date(end);
+    for (let cur = new Date(startD.getFullYear(), startD.getMonth(), 1);
+         cur <= endD;
+         cur.setMonth(cur.getMonth() + 1)) {
+      const ym = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}`;
+      const d = INITIAL.monthly[ym];
+      if (!d) continue;
+      const mEnd = new Date(cur.getFullYear(), cur.getMonth()+1, 0);
+      const rangeStart = startD > cur ? startD : cur;
+      const rangeEnd   = endD < mEnd ? endD : mEnd;
+      const ratio = ((rangeEnd - rangeStart) / 86400000 + 1) / mEnd.getDate();
+      ["fb","gg"].forEach(ch => {
+        const src = d[ch], dst = ch==="fb" ? fb : gg;
+        dst.cost   += src.cost   * ratio;
+        dst.clicks += src.clicks * ratio;
+        dst.imp    += src.imp    * ratio;
+      dst.conv   += src.conv   * ratio;
+    });
+  }
+
+  return { fb, gg, tot: {
+    cost:   fb.cost   + gg.cost,
+    clicks: fb.clicks + gg.clicks,
+    imp:    fb.imp    + gg.imp,
+    conv:   fb.conv   + gg.conv
+  }};
+}  
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`✓ Backend corriendo en puerto ${PORT}`));
